@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sentinel 项目介绍</title>
+  <style>
+    :root {
+      --bg: #f3f1eb;
+      --paper: #fffdf8;
+      --paper-strong: #ffffff;
+      --text: #1f2933;
+      --muted: #52606d;
+      --line: #ddd5c7;
+      --accent: #9f4f2a;
+      --accent-soft: #f4dfd2;
+      --code-bg: #f1ede3;
+      --shadow: 0 18px 48px rgba(45, 35, 20, 0.08);
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+      --content-width: 1040px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(159, 79, 42, 0.12), transparent 34%),
+        radial-gradient(circle at top right, rgba(111, 143, 114, 0.12), transparent 28%),
+        linear-gradient(180deg, #f8f5ef 0%, var(--bg) 100%);
+      font-family: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.75;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .page {
+      width: min(100% - 32px, var(--content-width));
+      margin: 0 auto;
+      padding: 40px 0 56px;
+    }
+
+    .hero {
+      margin-bottom: 28px;
+      padding: 40px;
+      border: 1px solid rgba(159, 79, 42, 0.16);
+      border-radius: 32px;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(249, 243, 236, 0.98)),
+        var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin: 0 0 12px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.3rem, 5vw, 4rem);
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+
+    .lead {
+      max-width: 760px;
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .hero-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .hero-tags li {
+      padding: 8px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.85);
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .content {
+      display: grid;
+      gap: 18px;
+    }
+
+    .panel {
+      padding: 28px 30px;
+      border: 1px solid rgba(82, 96, 109, 0.12);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(180deg, var(--paper-strong), var(--paper));
+      box-shadow: 0 12px 28px rgba(31, 41, 51, 0.05);
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 1.5rem;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    h3 {
+      margin: 26px 0 10px;
+      font-size: 1.08rem;
+      color: var(--accent);
+      line-height: 1.35;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    p:last-child,
+    ul:last-child {
+      margin-bottom: 0;
+    }
+
+    ul {
+      margin: 10px 0 14px;
+      padding-left: 22px;
+    }
+
+    li + li {
+      margin-top: 6px;
+    }
+
+    code {
+      padding: 0.15em 0.45em;
+      border-radius: 6px;
+      background: var(--code-bg);
+      border: 1px solid rgba(82, 96, 109, 0.12);
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 0.95em;
+    }
+
+    .summary-note {
+      padding: 16px 18px;
+      border-left: 4px solid var(--accent);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      background: #fcf3ec;
+      color: var(--muted);
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        width: min(100% - 20px, var(--content-width));
+        padding: 20px 0 28px;
+      }
+
+      .hero {
+        padding: 28px 20px;
+        border-radius: 24px;
+      }
+
+      .panel {
+        padding: 22px 18px;
+        border-radius: 18px;
+      }
+
+      .hero-tags {
+        gap: 8px;
+      }
+
+      .hero-tags li {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">Sentinel Project</p>
+      <h1>Sentinel 项目介绍</h1>
+      <p class="lead">一个面向 RoboMaster 机器人控制场景的嵌入式控制工程，围绕整车控制、模块解耦、多板协同和实时任务调度构建，可作为机器人电控系统的工程化开发底座。</p>
+      <ul class="hero-tags">
+        <li><code>STM32H723</code> 平台</li>
+        <li><code>FreeRTOS</code> 实时任务调度</li>
+        <li><code>BSP / Modules / Application</code> 三层架构</li>
+        <li><code>message_center</code> 发布订阅解耦</li>
+      </ul>
+    </header>
+
+    <section class="content">
+      <article class="panel">
+        <h2>项目概述</h2>
+        <p>Sentinel 是一个面向 RoboMaster 机器人控制场景的嵌入式控制工程，基于 <code>STM32H723</code> 平台构建，集成 <code>FreeRTOS</code> 实时任务调度、板级驱动封装、功能模块抽象和应用层控制逻辑，适用于云台、底盘、发射机构及多模块协同控制。</p>
+        <p>该项目并非单一功能 Demo，而是一套具有明确分层和较强复用能力的机器人电控框架。工程当前已经具备完整的机器人初始化、任务调度、应用消息交互、传感器接入、执行机构控制和板间通信能力，可直接作为整车控制系统的开发基础。</p>
+      </article>
+
+      <article class="panel">
+        <h2>项目定位</h2>
+        <ul>
+          <li>面向 RoboMaster 机器人电控开发</li>
+          <li>适用于英雄、步兵、哨兵等具备云台、底盘、发射机构的机器人平台</li>
+          <li>支持单板、双板以及扩展多板协同控制</li>
+          <li>适合作为比赛项目、电控框架、嵌入式课程设计和二次开发底座</li>
+        </ul>
+      </article>
+
+      <article class="panel">
+        <h2>核心特点</h2>
+
+        <h3>1. 清晰的三层架构</h3>
+        <p>项目采用 <code>BSP -&gt; Modules -&gt; Application</code> 三层结构：</p>
+        <ul>
+          <li><code>bsp</code> 层负责外设和底层硬件抽象</li>
+          <li><code>modules</code> 层负责电机、传感器、通信、算法等可复用功能模块</li>
+          <li><code>application</code> 层负责机器人业务逻辑与整车行为控制</li>
+        </ul>
+        <p>这种分层方式降低了代码耦合度，便于维护、移植和团队协作，也让新增功能可以在不破坏整体结构的前提下快速接入。</p>
+
+        <h3>2. 发布-订阅式消息机制</h3>
+        <p>项目内置 <code>message_center</code> 消息中心，应用之间通过发布/订阅进行数据交互，而不是直接相互依赖。</p>
+        <p>这意味着：</p>
+        <ul>
+          <li>云台、底盘、发射、指令处理模块彼此解耦</li>
+          <li>控制链路更清晰，便于扩展新功能</li>
+          <li>更适合多任务并发和多人协作开发</li>
+        </ul>
+
+        <h3>3. 面向机器人整车控制的应用封装</h3>
+        <p>应用层已经划分出完整的机器人核心控制单元：</p>
+        <ul>
+          <li><code>robot_cmd</code>：统一处理遥控器、键鼠、视觉等控制输入</li>
+          <li><code>gimbal</code>：负责云台姿态控制与反馈</li>
+          <li><code>chassis</code>：负责底盘运动学解算与运动控制</li>
+          <li><code>shoot</code>：负责摩擦轮、拨盘、弹仓盖等发射机构控制</li>
+          <li><code>robot</code>：统一完成整车初始化与任务调度</li>
+        </ul>
+        <p>这种组织方式使整车逻辑清晰，便于快速搭建完整控制链。</p>
+
+        <h3>4. 支持单板/双板协同部署</h3>
+        <p>项目通过条件编译支持不同板型配置，当前代码中已经提供：</p>
+        <ul>
+          <li><code>ONE_BOARD</code> 单板控制</li>
+          <li><code>CHASSIS_BOARD</code> 底盘板</li>
+          <li><code>GIMBAL_BOARD</code> 云台板</li>
+        </ul>
+        <p>适合将云台、底盘、裁判系统、遥控输入等功能分配到不同控制板，实现更灵活的整车部署。</p>
+
+        <h3>5. 面向实战的通信与模块扩展能力</h3>
+        <p>项目不只关注电机控制，还集成了机器人比赛和工程调试中常见的通信链路与功能模块，具备较强扩展性。</p>
+      </article>
+
+      <article class="panel">
+        <h2>主要功能</h2>
+
+        <h3>1. 底层外设与板级支持</h3>
+        <p><code>bsp</code> 层已经封装多类硬件接口，便于上层模块直接复用：</p>
+        <ul>
+          <li><code>CAN</code></li>
+          <li><code>USART / UART</code></li>
+          <li><code>SPI</code></li>
+          <li><code>IIC</code></li>
+          <li><code>USB</code></li>
+          <li><code>ADC</code></li>
+          <li><code>PWM</code></li>
+          <li><code>GPIO</code></li>
+          <li><code>Flash</code></li>
+          <li><code>DWT</code></li>
+          <li><code>Log</code></li>
+        </ul>
+        <p>这些基础能力为电机、传感器、上位机通信和调试工具提供了统一支撑。</p>
+
+        <h3>2. 电机与执行机构控制</h3>
+        <p>项目支持多类机器人关键执行机构控制，包括：</p>
+        <ul>
+          <li>云台 yaw / pitch 电机控制</li>
+          <li>底盘多电机协同控制</li>
+          <li>发射机构摩擦轮与拨盘控制</li>
+          <li>弹仓盖舵机控制</li>
+          <li>DJI 电机与 DM 电机接入</li>
+        </ul>
+        <p>可直接服务于云台控制、底盘驱动和发射机构控制等核心任务。</p>
+
+        <h3>3. 传感器与状态感知</h3>
+        <p>项目已集成多类常用感知模块：</p>
+        <ul>
+          <li>IMU 姿态解算</li>
+          <li><code>BMI088</code> 相关惯导支持</li>
+          <li><code>TFminiPlus</code> 测距模块</li>
+          <li>编码器反馈</li>
+          <li>裁判系统数据接入</li>
+        </ul>
+        <p>这些模块为姿态闭环、速度反馈、目标感知和整车状态判断提供基础数据。</p>
+
+        <h3>4. 多源控制输入融合</h3>
+        <p><code>robot_cmd</code> 模块能够统一处理多种控制来源，并将其转换为具体控制指令：</p>
+        <ul>
+          <li>遥控器输入</li>
+          <li>键盘鼠标输入</li>
+          <li>视觉控制输入</li>
+          <li>上位机控制数据</li>
+        </ul>
+        <p>这使项目既能满足人工操作，也能接入自动瞄准、上位机联调和半自动控制场景。</p>
+
+        <h3>5. 机器人比赛相关功能</h3>
+        <p>项目已包含 RoboMaster 场景下常见的比赛功能支持：</p>
+        <ul>
+          <li>裁判系统通信</li>
+          <li>裁判系统 UI 刷新</li>
+          <li>板间 CAN 通信</li>
+          <li>主从控通信</li>
+          <li>超级电容模块支持</li>
+          <li>VOFA 数据可视化调试</li>
+        </ul>
+        <p>对于比赛型机器人来说，这些能力能显著减少从零开发的工作量。</p>
+      </article>
+
+      <article class="panel">
+        <h2>软件架构亮点</h2>
+
+        <h3>应用层</h3>
+        <p>负责整车行为组织和控制逻辑实现，重点体现为：</p>
+        <ul>
+          <li>指令解析</li>
+          <li>模式切换</li>
+          <li>运动控制</li>
+          <li>发射控制</li>
+          <li>状态反馈</li>
+        </ul>
+
+        <h3>模块层</h3>
+        <p>负责沉淀可复用能力，当前包含：</p>
+        <ul>
+          <li>电机模块</li>
+          <li>IMU 模块</li>
+          <li>遥控模块</li>
+          <li>裁判系统模块</li>
+          <li>消息中心模块</li>
+          <li>守护模块</li>
+          <li>超级电容模块</li>
+          <li>蓝牙模块</li>
+          <li>OLED 模块</li>
+          <li>通信协议模块</li>
+        </ul>
+
+        <h3>BSP 层</h3>
+        <p>负责统一底层硬件接口，为上层屏蔽具体芯片外设差异，降低移植成本。</p>
+      </article>
+
+      <article class="panel">
+        <h2>项目优势</h2>
+        <ul>
+          <li>架构清晰，适合中大型机器人电控项目持续迭代</li>
+          <li>模块解耦明显，便于多人协同开发</li>
+          <li>支持多任务调度，适合实时控制场景</li>
+          <li>兼容单板与双板部署，工程适应性强</li>
+          <li>集成比赛常用功能，落地性强</li>
+          <li>同时具备控制、通信、调试、扩展四类能力</li>
+        </ul>
+      </article>
+
+      <article class="panel">
+        <h2>适用场景</h2>
+        <ul>
+          <li>RoboMaster 机器人整车控制开发</li>
+          <li>云台/底盘/发射机构一体化控制项目</li>
+          <li>机器人电控框架搭建</li>
+          <li>嵌入式控制系统课程设计与实验项目</li>
+          <li>需要多模块协同和高复用结构的 STM32 项目</li>
+        </ul>
+      </article>
+
+      <article class="panel">
+        <h2>总结</h2>
+        <div class="summary-note">
+          Sentinel 是一套面向机器人实战场景构建的嵌入式控制工程。它不仅具备云台、底盘、发射机构等核心功能，还通过三层架构、消息中心、多板协同和模块化封装，形成了较强的工程化能力。对于需要快速搭建机器人控制系统、同时兼顾扩展性与维护性的项目而言，Sentinel 具备较高的参考和使用价值。
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

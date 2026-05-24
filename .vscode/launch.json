@@ -1,0 +1,68 @@
+{
+    "configurations": [
+        {
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceFolder}\\build\\debug\\Basic_Framework_MC02.elf",
+            "name": "Debug with OpenOCD",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "configFiles": [
+                "${workspaceRoot}/stm32h7x_openocd.cfg"
+            ],
+            "searchDir": [],
+            "showDevDebugOutput": "none",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            }
+        },
+        {
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}\\build\\debug\\Basic_Framework_MC02.elf",
+            "name": "Debug with jlink",
+            "request": "launch",
+            "type": "cortex-debug",
+            "device": "stm32h723",
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "none",
+            "servertype": "jlink",
+            "interface": "swd",
+            "serialNumber": "",
+            "connectUnderReset": true,
+            "hardwareBreakpoints": {
+                "require": true,
+                "set": 6
+            }
+        },
+        {
+            "showDevDebugOutput": "parsed",
+            "cwd": "${workspaceRoot}",
+            "executable": "./build/debug/Basic_Framework_MC02.elf",
+            "name": "Debug STM32",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "preLaunchTask": "Build STM",
+            "device": "stm32h723",
+            "configFiles": [
+                "openocd.cfg"
+            ]
+        },
+        {
+            "showDevDebugOutput": "parsed",
+            "cwd": "${workspaceRoot}",
+            "executable": "./build/debug/Basic_Framework_MC02.elf",
+            "name": "Attach STM32",
+            "request": "attach",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "preLaunchTask": "Build STM",
+            "device": "stm32h723",
+            "configFiles": [
+                "openocd.cfg"
+            ]
+        }
+    ]
+   
+}
