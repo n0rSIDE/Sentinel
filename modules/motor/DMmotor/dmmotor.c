@@ -14,6 +14,7 @@
 #include "vofa.h"
 #include "gimbal.h"
 #include "dji_motor.h"
+#include "gain_schedule.h"  // 增益调度模块
 
 /* ==================== 外部依赖变量声明 ==================== */
 // float shootData[3]= {0};
@@ -385,10 +386,14 @@ extern float err_feedback_yaw1_to_yaw2; ///< yaw1 给 yaw2 的前馈补偿量（
 
 uint8_t protect_flag = 0;            ///< 保护标志位（未使用）
 
-//@Todo: 
+//@Todo:
 
 float forword_sppeed_feedback=0.0f;  ///< 前馈速度反馈（未使用）
 float err;                           ///< 误差变量（未使用）
+
+/* ==================== 增益调度配置 ==================== */
+// 引用 gimbal.c 中的参数配置
+extern GainScheduleParams_t yaw2_gain_schedule_params;
 
 /* ==================== DM 电机核心控制任务 ==================== */
 /**
@@ -450,6 +455,7 @@ void DMMotorTask(void const *argument)
     DMMotorSetMode(DM_CMD_MOTOR_MODE, motor);
     Motor_Control_Setting_s *setting = &motor->motor_settings;
     DMMotor_Send_s motor_send_mailbox;
+
     while (1)
     {
         DMMotorSetMode(DM_CMD_MOTOR_MODE, motor);
@@ -479,14 +485,39 @@ void DMMotorTask(void const *argument)
             /* ==================== 步骤 2c: 位置环计算 ==================== */
             // 计算位置环 PID 输出（期望速度）
             if(setting->outer_loop_type==ANGLE_LOOP){//yaw2   加了反向
-                speed_ref=-DMPIDCalculate(&motor->angle_PID, angle_feedback, yaw1_motor_zero_position);
-                err_feedback_yaw2_to_yaw1=speed_ref;  // 记录 yaw2→yaw1 前馈量
-                speed_ref+=1*chassis_fetch_data.real_wz;  // 叠加底盘角速度补偿
-                chassis_fetch_data.real_wz=0;  // 清除底盘角速度（防止重复使用）
-                speed_ref-=err_feedback_yaw1_to_yaw2;  // 减去 yaw1→yaw2 前馈量
+
+                // ========== 增益调度: 动态更新PID参数 ==========
+                // 计算误差
+                float position_error = yaw1_motor_zero_position - angle_feedback;
+
+                // 角度归一化到 [-180, 180]
+                if (position_error > 180.0f) {
+                    position_error -= 360.0f;
+                } else if (position_error < -180.0f) {
+                    position_error += 360.0f;
+                }
+
+                // 根据误差大小动态更新Kp/Ki/Kd
+                GainSchedule_UpdatePIDParams(&motor->angle_PID,
+                                              &yaw2_gain_schedule_params,
+                                              position_error);
+
+                // ========== 原有PID计算 ==========
+                // 使用更新后的参数进行PID计算（保留所有高级功能）
+                speed_ref = -DMPIDCalculate(&motor->angle_PID, angle_feedback, yaw1_motor_zero_position);
+
+                // ========== 前馈补偿 ==========
+                err_feedback_yaw2_to_yaw1 = speed_ref;  // 记录 yaw2→yaw1 前馈量
+                speed_ref += 1 * chassis_fetch_data.real_wz;  // 叠加底盘角速度补偿
+                chassis_fetch_data.real_wz = 0;  // 清除底盘角速度（防止重复使用）
+                speed_ref -= err_feedback_yaw1_to_yaw2;  // 减去 yaw1→yaw2 前馈量
                 err_feedback_yaw1_to_yaw2 = 0.0f;  // 清除前馈量
-                yaw_2_angle_feedback=speed_ref;
-                yaw_2_angle_feedback1=speed_ref;
+
+                // 保存调试数据
+                yaw_2_angle_feedback = speed_ref;
+                yaw_2_angle_feedback1 = speed_ref;
+
+                // 设置 MIT 协议参数
                 motor_send_mailbox.Kd = 0x500;  // 设置微分增益
             }
 

@@ -13,6 +13,7 @@
 #include "xrobot_imu_driver.h"
 
 #include "buzzer.h"
+#include "gain_schedule.h"  // 增益调度模块
 
 /* ==================== 外部依赖变量声明 ==================== */
 extern INS_t INS;                      ///< 惯性导航系统实例
@@ -22,6 +23,19 @@ extern Vision_Recv_s *vision_recv_data; ///< 视觉接收数据指针（初始�
 extern Vision_Send_s vision_send_data;  ///< 视觉发送数据结构
 extern uint8_t flag_vision_mode;        ///< 视觉模式标志位（1=哨兵模式）
 
+/* ==================== yaw2 增益调度配置 ==================== */
+GainScheduleParams_t yaw2_gain_schedule_params = {
+    .error_threshold = {6.0f, 12.0f, 30.0f},
+
+    .Kp_values = {0.05f, 0.20f, 0.30f, 0.25f},
+
+    .Ki_values = {0.0f, 0.0f, 0.0f, 0.0f},
+
+    .Kd_values = {0.01f, 0.01f, 0.01f, 0.01f},
+
+    .interp_type = INTERP_S_CURVE_3,
+};
+    
 /* ==================== 模块内部全局变量 ==================== */
 static attitude_t *gimba_IMU_data;      ///< 云台 IMU 数据指针，指向解算后的姿态信息
 DJIMotorInstance *yaw1_motor;           ///< yaw 轴电机 1 实例（小云台电机）
@@ -105,7 +119,7 @@ float reset_xrimu_data_range(float data) // -180~180
  */
 void GimbalInit()
 {
-    //gimba_IMU_data = INS_Init(); // IMU 先初始化，获取姿态数据指针赋给 yaw 电机的其他数据来源，
+    // gimba_IMU_data = INS_Init(); // IMU 先初始化，获取姿态数据指针赋给 yaw 电机的其他数据来源，
 
     /* ==================== yaw1 电机初始化（小云台yaw轴） ==================== */
     Motor_Init_Config_s yaw1_config = {
@@ -116,8 +130,8 @@ void GimbalInit()
         },  
         .controller_param_init_config = {
             .angle_PID = {
-                .Kp = 18, // 10
-                .Ki = 8,
+                .Kp = 23, // 10
+                .Ki = 10,
                 .Kd = 1,
                 .Improve = PID_Trapezoid_Intergral | PID_ChangingIntegrationRate | PID_Integral_Limit | PID_OutputFilter | PID_DerivativeFilter,
                 .CoefA = 0.5, // 0.5
@@ -202,7 +216,8 @@ void GimbalInit()
     pitch_motor = DJIMotorInit(&pitch_config);
 
     /* ==================== yaw2 电机初始化（大云台yaw 轴/底盘跟随） ==================== */
-    //大 yaw
+    // 注意: yaw2 使用增益调度 + 原有PID集成
+    // 增益调度动态调整Kp/Ki/Kd，原有PID保留所有高级功能
     Motor_Init_Config_s dm8006_yaw2={
        .can_init_config ={
          .can_handle = &hcan2,
@@ -211,16 +226,16 @@ void GimbalInit()
        },
        .controller_param_init_config = {
            .angle_PID = {
-                .Kp = 0.3,           // 减小 Kp 从 0.2 到 0.15
-                .Ki = 0.0,              // 保持或减小
-                .Kd = 0.01,      // 0.006
-                .CoefA = 0.5,          // 0.5
-                .CoefB = 0.6,          // 0.6
-                .DeadBand = 6,     // 4
-                .Output_LPF_RC = 0.01, // 0.01
+                .Kp = 0.3,           // 基础Kp，会被增益调度动态调整
+                .Ki = 0.0,           // 基础Ki，会被增益调度动态调整
+                .Kd = 0.01,          // 基础Kd，会被增益调度动态调整
+                .CoefA = 0.5,        // 变积分系数A
+                .CoefB = 0.6,        // 变积分系数B
+                .DeadBand = 0.01,    // 死区
+                .Output_LPF_RC = 0.01, // 输出低通滤波
                 .Improve = PID_Trapezoid_Intergral | PID_ChangingIntegrationRate | PID_Integral_Limit | PID_OutputFilter | PID_DerivativeFilter,
-                .IntegralLimit = 1, // 1
-                .MaxOut = 45,      // 600
+                .IntegralLimit = 1,  // 积分限幅
+                .MaxOut = 45,        // 最大输出
             },
         },
         .controller_setting_init_config = {
@@ -228,8 +243,8 @@ void GimbalInit()
             .speed_feedback_source = MOTOR_FEED,
             .outer_loop_type = ANGLE_LOOP,          //这里改成前馈计算和使用的标志位了，不是原来的意思，ANGLE_LOOP 是被计算反馈，SPEED_LOOP 是使用反馈
             .close_loop_type = ANGLE_AND_SPEED_LOOP,
-            .motor_reverse_flag = MOTOR_DIRECTION_NORMAL,  
-            .feedback_reverse_flag = FEEDBACK_DIRECTION_NORMAL 
+            .motor_reverse_flag = MOTOR_DIRECTION_NORMAL,
+            .feedback_reverse_flag = FEEDBACK_DIRECTION_NORMAL
         },
         .motor_type = no_set_zero
     };

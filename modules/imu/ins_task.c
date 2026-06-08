@@ -90,8 +90,8 @@ attitude_t *INS_Init(void)
 
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 
-    while (BMI088Init(&hspi2, 1) != BMI088_NO_ERROR)
-        ;
+    //while (BMI088Init(&hspi2, 1) != BMI088_NO_ERROR)
+    //    ;
     IMU_Param.scale[X] = 1;
     IMU_Param.scale[Y] = 1;
     IMU_Param.scale[Z] = 1;
