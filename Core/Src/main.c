@@ -71,10 +71,6 @@ int32_t OSPI_Status ; 		 //����־λ
 uint8_t  W25Qxx_WriteBuffer[W25Qxx_NumByteToTest];		//	д��������
 uint8_t  W25Qxx_ReadBuffer[W25Qxx_NumByteToTest];		//	����������
 
-// 注册CAN实例,dm8006电机反馈数据
-CANInstance* can2_instance;
-extern DMMotorInstance *dmmotor_yaw2;
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -85,48 +81,6 @@ void MX_FREERTOS_Init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-/**
-************************************************************************
-* @brief:      	dm4310_fbdata: 获取DM4310电机反馈数据函数
-* @param[in]:   motor:    指向motor_t结构的指针，包含电机相关信息和反馈数据
-* @param[in]:   rx_data:  指向包含反馈数据的数组指针
-* @retval:     	void
-* @details:    	从接收到的数据中提取DM4310电机的反馈信息，包括电机ID、
-*               状态、位置、速度、扭矩以及相关温度参数
-************************************************************************
-**/
-void dm_motor_fbdata(DM_Motor_Measure_s *measure, uint8_t *rx_data)//只针对达妙电机数据读取
-{
-	measure->id = (rx_data[0])&0x0F;
-	measure->state = (rx_data[0])>>4;
-	measure->position = uint_to_float(((rx_data[1]<<8)|rx_data[2]), -12.5, 12.5, 16); // (-12.5,12.5)
-	measure->velocity = uint_to_float(((rx_data[3]<<4)|(rx_data[4]>>4)),-30, 30, 12); // (-45.0,45.0)
-	measure->torque = uint_to_float((((rx_data[4]&0xF)<<8)|rx_data[5]), -10, 10, 12); // (-18.0,18.0)
-	measure->T_Mos = (float)(rx_data[6]);
-	measure->T_Rotor = (float)(rx_data[7]);
-}
-void can2_receive_callback(CANInstance* instance) {
-	  dm_motor_fbdata(&dmmotor_yaw2->measure, instance->rx_buff);
-    dmmotor_yaw2->lost_cnt = 1;
-}
-void register_can2_receiver(uint32_t rx_id) {//yaw2的电机数据读取
-    // 定义CAN初始化配置结构体
-    CAN_Init_Config_s can2_config = {
-        .can_handle = &hfdcan2,                 // 使用CAN3句柄
-        .tx_id = 0x18,                         // 发送ID（根据需要设置）
-        .rx_id = rx_id,                         // 接收ID
-        .can_module_callback = can2_receive_callback, // 接收回调函数
-        .id = NULL                              // 可选的模块标识符
-    };
-    // 注册CAN实例
-    CANInstance* can2_instance = CANRegister(&can2_config);
-    if (can2_instance != NULL) {
-        printf("CAN3 receiver registered successfully\n");
-    } else {
-        printf("Failed to register CAN3 receiver\n");
-    }
-}
 
 /* USER CODE END 0 */
 
@@ -180,11 +134,6 @@ int main(void)
   MX_UART9_Init();
   MX_I2C2_Init();
   MX_USART6_UART_Init();
-  /* USER CODE BEGIN 2 */
-  // 初始化CAN3模块
-  HAL_GPIO_WritePin(GPIOC,GPIO_PIN_15,GPIO_PIN_SET);
-  register_can2_receiver(0x18);
-  register_imu_can_receiver(&hfdcan3);
 
   RobotInit(); 
 

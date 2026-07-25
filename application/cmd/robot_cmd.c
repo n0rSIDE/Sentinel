@@ -28,14 +28,13 @@
  * 3. 将状态回传给视觉侧，并统一下发控制指令
  */
 
-extern ImuData imu_data;                     // XR IMU 解算结果
 extern DJIMotorInstance *yaw1_motor;         // yaw 电机实例
 extern DJIMotorInstance *pitch_motor;        // pitch 电机实例
 extern float yaw1_motor_zero_position;       // yaw 电机机械零点
 extern float begin_xrimu_yaw;                // 模式切换时记录的 yaw 参考值
 extern float begin_xrimu_pitch;              // 模式切换时记录的 pitch 参考值
 
-uint8_t flag_vision_mode = 0;                // 0: 非视觉模式, 1: 视觉模式
+//uint8_t flag_vision_mode = 0;                // 0: 非视觉模式, 1: 视觉模式
 
 // 编码器零点换算得到的机械参考角
 #define YAW_ALIGN_ANGLE (YAW_CHASSIS_ALIGN_ECD * ECD_ANGLE_COEF_DJI)
@@ -69,6 +68,9 @@ static Publisher_t *shoot_cmd_pub;           // 发射控制发布者
 static Subscriber_t *shoot_feed_sub;         // 发射反馈订阅者
 static Shoot_Ctrl_Cmd_s shoot_cmd_send;      // 发射控制指令
 static Shoot_Upload_Data_s shoot_fetch_data; // 发射反馈数据
+
+static Subscriber_t *x_imu_sub;              // xrobot_imu 数据订阅者
+static ImuData imu_data;                     // 来自 xrobot_imu 的 IMU 数据（消息订阅获取）
 
 static Robot_Status_e robot_state;           // 机器人整体工作状态
 
@@ -124,6 +126,7 @@ void RobotCMDInit()
 
     gimbal_cmd_pub = PubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
     gimbal_feed_sub = SubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
+    x_imu_sub = SubRegister("x_imu_feed", sizeof(ImuData)); // 订阅来自 INS_Task 的 IMU 数据
     shoot_cmd_pub = PubRegister("shoot_cmd", sizeof(Shoot_Ctrl_Cmd_s));
     shoot_feed_sub = SubRegister("shoot_feed", sizeof(Shoot_Upload_Data_s));
 
@@ -336,6 +339,7 @@ void RobotCMDTask()
 {
     // 先同步 ET 遥控数据到通用遥控结构，便于复用现有控制流程。
     et_rc_data_transform(et_rc_data);
+    SubGetMessage(x_imu_sub, &imu_data); // 获取最新 IMU 姿态数据
 
 #ifdef ONE_BOARD
     SubGetMessage(chassis_feed_sub, (void *)&chassis_fetch_data);
@@ -352,9 +356,9 @@ void RobotCMDTask()
         RemoteControlSet();
         if (et_rc_data->switch_left_3 == 1) {
             SentinelSet();
-            flag_vision_mode = 1;
+            gimbal_cmd_send.flag_vision_mode = 1;
         } else {
-            flag_vision_mode = 0;
+            gimbal_cmd_send.flag_vision_mode = 0;
             begin_xrimu_pitch = imu_data.eulr.roll - gimbal_cmd_send.pitch;
         }
     }

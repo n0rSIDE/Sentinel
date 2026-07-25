@@ -10,10 +10,10 @@
 
 #define DM_P_MIN  (-12.5f)
 #define DM_P_MAX  12.5f
-#define DM_V_MIN  (-45.0f)
-#define DM_V_MAX  45.0f
-#define DM_T_MIN  (-18.0f)
-#define DM_T_MAX   18.0f
+#define DM_V_MIN  (-30.0f)
+#define DM_V_MAX  30.0f
+#define DM_T_MIN  (-10.0f)
+#define DM_T_MAX   10.0f
 
 typedef struct 
 {
@@ -40,14 +40,7 @@ typedef struct
 {
     DM_Motor_Measure_s measure;
     Motor_Control_Setting_s motor_settings;
-    PIDInstance current_PID;
-    PIDInstance speed_PID;
-    PIDInstance angle_PID;
-    float *other_angle_feedback_ptr;
-    float *other_speed_feedback_ptr;
-    float *speed_feedforward_ptr;
-    float *current_feedforward_ptr;
-    float pid_ref;
+    Motor_Controller_s motor_controller;
     Motor_Working_Type_e stop_flag;
     CANInstance *motor_can_instace;
     DaemonInstance* motor_daemon;

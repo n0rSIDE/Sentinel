@@ -21,7 +21,9 @@
 #include "master_process.h"
 #include "arm_math.h"
 #include "fdcan.h"
+#include "gpio.h"
 #include "dm_imu.h"
+#include "xrobot_imu_driver.h"
 
 INS_t INS;
 static IMU_Param_t IMU_Param;
@@ -116,6 +118,14 @@ attitude_t *INS_Init(void)
     // noise of accel is relatively big and of high freq,thus lpf is used
     INS.AccelLPF = 0.0085;
     DWT_GetDeltaT(&INS_DWT_Count);
+
+    // ========== 外置 XR IMU 初始化 ==========
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);   // 外置 IMU 模块上电
+    register_imu_can_receiver(&hfdcan3);                    // 注册 CAN 接收器
+
+    // 初始化 IMU 数据发布者（注册到消息总线，供 gimbal/robot_cmd 订阅）
+    IMU_PubInit();
+
     return (attitude_t *)&INS.Gyro; // @todo: 这里偷懒了,不要这样做! 修改INT_t结构体可能会导致异常,待修复.
 }
 
@@ -176,6 +186,9 @@ void INS_Task(void)
         INS.Pitch = QEKF_INS.Pitch;
         INS.Roll = QEKF_INS.Roll;
         INS.YawTotalAngle = QEKF_INS.YawTotalAngle;
+
+        // 将 CAN 外置 IMU 的最新数据发布到消息总线（供 gimbal/robot_cmd 订阅）
+        IMU_PublishData();
 
         //VisionSetAltitude(INS.Yaw, INS.Pitch, INS.Roll);
     }

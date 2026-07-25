@@ -14,19 +14,19 @@
 #include "vofa.h"
 #include "gimbal.h"
 #include "dji_motor.h"
-#include "gain_schedule.h"  // 增益调度模块
+#include "gain_schedule.h"
 
 /* ==================== 外部依赖变量声明 ==================== */
 // float shootData[3]= {0};
 
-extern imu_t imu;                    ///< 全局 IMU 实例（姿态数据）
-extern INS_t INS;                    ///< 惯性导航系统实例
+//extern imu_t imu;                    ///< 全局 IMU 实例（姿态数据）
+//extern INS_t INS;                    ///< 惯性导航系统实例
 
-extern DJIMotorInstance *yaw1_motor; ///< yaw1 电机实例（用于耦合补偿）
+//extern DJIMotorInstance *yaw1_motor; ///< yaw1 电机实例（用于耦合补偿）
 extern float yaw1_motor_zero_position; ///< yaw1 电机零点位置
 
 extern Chassis_Upload_Data_s chassis_fetch_data;  ///< 底盘反馈数据（功率、热量、运动状态等）
-extern Chassis_Ctrl_Cmd_s chassis_cmd_send;       ///< 发送给底盘的控制指令（含 UI 绘制）
+//extern Chassis_Ctrl_Cmd_s chassis_cmd_send;       ///< 发送给底盘的控制指令（含 UI 绘制）
 
 /* ==================== 电机实例管理 ==================== */
 static uint8_t idx;                              ///< 已注册 DM 电机数量索引
@@ -152,35 +152,7 @@ float uint_to_float(int x_int, float x_min, float x_max, int bits)
  */
 float reset_imu_data_range(float data)
 {
-    if (data>180){
-        data=data-360;}
-    else if (data<-180){
-        data=data+360;}
-    return data;
-}
-
-/**
- * @brief 云台 pitch 角度指令转换函数
- * 
- * @param cmd_pitch_data 遥控指令中的 pitch 数据（弧度制）
- * @param pitch_init_imu_data IMU 初始 pitch 角度（度）
- * @return float 转换后的目标 pitch 角度（度）
- * 
- * @details 将遥控器输入的弧度制 pitch 指令转换为相对于初始姿态的角度值
- *          流程：
- *          1. 弧度转角度：angle = rad × (180/π)
- *          2. 计算相对角度：target = init_angle - cmd_angle
- *          3. 归一化到 [-180°, 180°] 范围
- * 
- * @note 该函数用于实现云台俯仰轴的相对控制
- */
-float pitch_cmd_data_change(float cmd_pitch_data , float pitch_init_imu_data)
-{
-     // 弧度转角度公式：角度 = 弧度 * (180 / π)
-    const float RAD_TO_DEG = 180.0f / 3.14159265359f;
-    float pitch_data = cmd_pitch_data * RAD_TO_DEG;
-    pitch_data = reset_imu_data_range(pitch_init_imu_data - pitch_data);
-    return pitch_data;
+    return theta_format(data);
 }
 
 /* ==================== 内部辅助函数实现 ==================== */
@@ -295,13 +267,16 @@ DMMotorInstance *DMMotorInit(Motor_Init_Config_s *config)
 {
     DMMotorInstance *motor = (DMMotorInstance *)malloc(sizeof(DMMotorInstance));
     memset(motor, 0, sizeof(DMMotorInstance));
-    
+    motor->lost_cnt = 1;//后面再对这个参数进行调整，暂时先设置为 1
+
     motor->motor_settings = config->controller_setting_init_config;
-    PIDInit(&motor->current_PID, &config->controller_param_init_config.current_PID);
-    PIDInit(&motor->speed_PID, &config->controller_param_init_config.speed_PID);
-    PIDInit(&motor->angle_PID, &config->controller_param_init_config.angle_PID);
-    motor->other_angle_feedback_ptr = config->controller_param_init_config.other_angle_feedback_ptr;
-    motor->other_speed_feedback_ptr = config->controller_param_init_config.other_speed_feedback_ptr;
+    PIDInit(&motor->motor_controller.current_PID, &config->controller_param_init_config.current_PID);
+    PIDInit(&motor->motor_controller.speed_PID, &config->controller_param_init_config.speed_PID);
+    PIDInit(&motor->motor_controller.angle_PID, &config->controller_param_init_config.angle_PID);
+    motor->motor_controller.other_angle_feedback_ptr = config->controller_param_init_config.other_angle_feedback_ptr;
+    motor->motor_controller.other_speed_feedback_ptr = config->controller_param_init_config.other_speed_feedback_ptr;
+    motor->motor_controller.current_feedforward_ptr  = config->controller_param_init_config.current_feedforward_ptr;
+    motor->motor_controller.speed_feedforward_ptr    = config->controller_param_init_config.speed_feedforward_ptr;
 
     config->can_init_config.can_module_callback = DMMotorDecode;
     config->can_init_config.id = motor;
@@ -334,7 +309,7 @@ DMMotorInstance *DMMotorInit(Motor_Init_Config_s *config)
  */
 void DMMotorSetRef(DMMotorInstance *motor, float ref)
 {
-    motor->pid_ref = ref;
+    motor->motor_controller.pid_ref = ref;
 }
 
 /**
@@ -375,20 +350,17 @@ void DMMotorOuterLoop(DMMotorInstance *motor, Closeloop_Type_e type)
 }
 
 /* ==================== DM 电机控制任务全局变量 ==================== */
-float angle_feedback;                ///< 角度反馈值（用于三环计算）
 float yaw_2_angle_feedback;          ///< yaw2 电机角度反馈（调试用）
-float yaw_2_angle_feedback1;         ///< yaw2 电机角度反馈备份（调试用）
+float angle_feedback;                ///< 角度反馈值（用于三环计算）
 float speed_ref;                     ///< 速度参考值（位置环输出）
 
 //last_set 用于拨弹盘电机设置零点标志位
 float err_feedback_yaw2_to_yaw1;     ///< yaw2 给 yaw1 的前馈补偿量
 extern float err_feedback_yaw1_to_yaw2; ///< yaw1 给 yaw2 的前馈补偿量（来自 dji_motor.c）
 
-uint8_t protect_flag = 0;            ///< 保护标志位（未使用）
-
 //@Todo:
-
-float forword_sppeed_feedback=0.0f;  ///< 前馈速度反馈（未使用）
+uint8_t protect_flag = 0;            ///< 保护标志位（未使用）
+float forword_speed_feedback=0.0f;  ///< 前馈速度反馈（未使用）
 float err;                           ///< 误差变量（未使用）
 
 /* ==================== 增益调度配置 ==================== */
@@ -464,19 +436,11 @@ void DMMotorTask(void const *argument)
         // 根据闭环类型选择不同的控制策略
         if(setting->close_loop_type==ANGLE_AND_SPEED_LOOP){
              // 反馈位置 + 电机速度双环控制模式
+             //目前只有用到MOTOR_FEED作为反馈源，后续可以扩展为IMU_FEED或BM1088_FEED
             if (setting->angle_feedback_source == MOTOR_FEED ) 
             {
-                angle_feedback = yaw1_motor->measure.angle_single_round;
+                angle_feedback = *motor->motor_controller.other_angle_feedback_ptr; // 使用 yaw1 电机编码器反馈
             } 
-            else if (setting->angle_feedback_source == BM1088_FEED) 
-            {
-                angle_feedback = INS.Yaw;
-            } 
-            else if (setting->angle_feedback_source == IMU_FEED) 
-            {
-                // 使用 IMU 的 yaw 角度作为反馈
-                angle_feedback = reset_imu_data_range(imu.yaw);
-            }
             
             /* ==================== 步骤 2b: 方向处理 ==================== */
             if (setting->feedback_reverse_flag == FEEDBACK_DIRECTION_REVERSE)
@@ -491,31 +455,27 @@ void DMMotorTask(void const *argument)
                 float position_error = yaw1_motor_zero_position - angle_feedback;
 
                 // 角度归一化到 [-180, 180]
-                if (position_error > 180.0f) {
-                    position_error -= 360.0f;
-                } else if (position_error < -180.0f) {
-                    position_error += 360.0f;
-                }
+                position_error = theta_format(position_error);
 
                 // 根据误差大小动态更新Kp/Ki/Kd
-                GainSchedule_UpdatePIDParams(&motor->angle_PID,
+                GainSchedule_UpdatePIDParams(&motor->motor_controller.angle_PID,
                                               &yaw2_gain_schedule_params,
                                               position_error);
 
                 // ========== 原有PID计算 ==========
-                // 使用更新后的参数进行PID计算（保留所有高级功能）
-                speed_ref = -DMPIDCalculate(&motor->angle_PID, angle_feedback, yaw1_motor_zero_position);
+                // 使用更新后的参数进行PID计算
+                speed_ref = -DMPIDCalculate(&motor->motor_controller.angle_PID, angle_feedback, yaw1_motor_zero_position);
 
                 // ========== 前馈补偿 ==========
                 err_feedback_yaw2_to_yaw1 = speed_ref;  // 记录 yaw2→yaw1 前馈量
                 speed_ref += 1 * chassis_fetch_data.real_wz;  // 叠加底盘角速度补偿
+                //这里把speed_ref用局部变量会不会更好
                 chassis_fetch_data.real_wz = 0;  // 清除底盘角速度（防止重复使用）
-                speed_ref -= err_feedback_yaw1_to_yaw2;  // 减去 yaw1→yaw2 前馈量
+                speed_ref -= err_feedback_yaw1_to_yaw2;  // 减去 yaw1→yaw2 前馈量（未使用）
                 err_feedback_yaw1_to_yaw2 = 0.0f;  // 清除前馈量
 
                 // 保存调试数据
                 yaw_2_angle_feedback = speed_ref;
-                yaw_2_angle_feedback1 = speed_ref;
 
                 // 设置 MIT 协议参数
                 motor_send_mailbox.Kd = 0x500;  // 设置微分增益

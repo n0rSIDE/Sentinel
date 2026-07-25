@@ -431,7 +431,7 @@ float measure_ref;
 
 // 为所有电机实例计算三环 PID，发送控制报文
 
-static uint8_t measure_motor_id = 0;  ///< 用于调试的电机索引（未使用）
+static uint8_t measure_motor_id = 1;  ///< 用于调试的电机索引（未使用）
 
 /**
  * @brief 电机调试数据结构体
@@ -627,8 +627,6 @@ void DJIMotorControl()
             {
                 set=0;//补偿力，防止在临界位置一直抖动
             }
-            else
-            {err_feedback_yaw1_to_yaw2=0;}
 
             // if(set >= 20000)
             // {set=0;}

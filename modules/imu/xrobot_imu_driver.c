@@ -3,6 +3,7 @@
 #include <string.h>
 #include "bsp_can.h"
 #include <stdio.h>
+#include "message_center.h"
 
 #define IMU_DEVICE_ID (0x30)
 
@@ -23,6 +24,7 @@ CANInstance* imu_can_instance2;
 CANInstance* imu_can_instance3;
 CANInstance* imu_can_instance4;
 
+static Publisher_t *x_imu_pub; ///< IMU 数据发布者（向 gimbal 发送解算后的姿态数据）
 
 typedef struct {
   FDCAN_RxHeaderTypeDef header;
@@ -85,7 +87,6 @@ static float DecodeFloat21(uint32_t encoded, float min, float max) {
 static float DecodeInt16Normalized(int16_t value) {
   return (float)value / (float)INT16_MAX;
 }
-
 can_raw_rx_t rx_buff;
 ImuData imu_data;
 uint32_t pack_count = 0;
@@ -178,8 +179,20 @@ static void ProcessClassicCanPacket(uint32_t id, uint8_t *data) {
 void imu_classic_can_receive_callback(CANInstance* instance) {
   ProcessClassicCanPacket(instance->rx_id, instance->rx_buff);
 }
+//注册消息与发布消息接口，在INS里面调用
+void IMU_PubInit(void)
+{
+    x_imu_pub = PubRegister("x_imu_feed", sizeof(ImuData));
+}
+
+void IMU_PublishData(void)
+{
+    if (x_imu_pub != NULL)
+        PubPushMessage(x_imu_pub, (void *)&imu_data);
+}
 
 void register_imu_can_receiver(FDCAN_HandleTypeDef* fdcan_id ) {
+
     // 定义CAN初始化配置结构体
     CAN_Init_Config_s imu_can_config1 = {
         .can_handle = fdcan_id,                

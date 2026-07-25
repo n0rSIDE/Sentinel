@@ -14,25 +14,22 @@
 
 #include "buzzer.h"
 #include "gain_schedule.h"  // 增益调度模块
+#include "user_lib.h"
 
 /* ==================== 外部依赖变量声明 ==================== */
-extern INS_t INS;                      ///< 惯性导航系统实例
-extern ImuData imu_data;               ///< IMU 原始数据（包含欧拉角和陀螺仪数据）
 extern float err_feedback_yaw2_to_yaw1; ///< yaw2 到 yaw1 的角度误差反馈
-extern Vision_Recv_s *vision_recv_data; ///< 视觉接收数据指针（初始化时返回）
-extern Vision_Send_s vision_send_data;  ///< 视觉发送数据结构
-extern uint8_t flag_vision_mode;        ///< 视觉模式标志位（1=哨兵模式）
+//extern INS_t INS;                      ///< 惯性导航系统实例
+//extern uint8_t flag_vision_mode;        ///< 视觉模式标志位（1=哨兵模式）
+//extern ImuData imu_data;               ///< IMU 原始数据（包含欧拉角和陀螺仪数据）
+//extern Vision_Recv_s *vision_recv_data; ///< 视觉接收数据指针（初始化时返回）
+//extern Vision_Send_s vision_send_data;  ///< 视觉发送数据结构
 
 /* ==================== yaw2 增益调度配置 ==================== */
 GainScheduleParams_t yaw2_gain_schedule_params = {
     .error_threshold = {6.0f, 12.0f, 30.0f},
-
     .Kp_values = {0.05f, 0.20f, 0.30f, 0.25f},
-
     .Ki_values = {0.0f, 0.0f, 0.0f, 0.0f},
-
     .Kd_values = {0.01f, 0.01f, 0.01f, 0.01f},
-
     .interp_type = INTERP_S_CURVE_3,
 };
     
@@ -47,10 +44,17 @@ static Subscriber_t *gimbal_sub;                  ///< cmd 控制指令订阅者
 static Gimbal_Upload_Data_s gimbal_feedback_data; ///< 回传给 cmd 的云台状态信息
 static Gimbal_Ctrl_Cmd_s gimbal_cmd_recv;         ///< 来自 cmd 的控制指令
 
-static Chassis_Upload_Data_s chassis_real_speed;   ///< 底盘实际速度数据
-static Subscriber_t *chassis_speed_sub;            ///< 底盘反馈信息订阅者
+static Subscriber_t *x_imu_sub;                   ///< xrobot_imu 数据订阅者
+static ImuData imu_data;                          ///< 来自 xrobot_imu 的 IMU 数据
+
+//static Chassis_Upload_Data_s chassis_real_speed;   ///< 底盘实际速度数据
+//static Subscriber_t *chassis_speed_sub;            ///< 底盘反馈信息订阅者
 
 /* ==================== 前馈控制相关变量 ==================== */
+// yaw2到yaw1的前馈增益系数应该都为负数，表示yaw2的正向运动会产生对yaw1的负向补偿
+static float yaw2_to_yaw1_speed_ff_gain = -55.0f;    ///< yaw2 到 yaw1 的速度前馈增益
+static float yaw2_to_yaw1_current_ff_gain = 0.0f;   ///< yaw2 到 yaw1 的电流前馈增益
+
 static float yaw_gyro_feedforward = -0.0f;          ///< yaw 轴陀螺仪前馈量（预留）
 
 static float yaw_current_forward_abs = 0.0f;        ///< yaw 轴电流前馈绝对值（未使用）
@@ -62,7 +66,11 @@ static float yaw1_speed_feedforward = 0.0f;         ///< yaw1 电机速度前馈
 static float pitch_current_feedforward = 0.0f;      ///< pitch电机电流前馈量
 static float pitch_speed_feedforward = 0.0f;        ///< pitch电机速度前馈量
 
+static float yaw2_angle_feedback = 0.0f;         ///< yaw2 电机角度前馈量（用于 yaw1→yaw2 耦合补偿）
+
 float yaw1_motor_zero_position = 330.0f;            ///< yaw1 电机机械零点位置（单位：度）
+
+static float yaw1_state_error = 0.0f;                 ///< yaw1 电机状态误差（用于调试）
 
 //static float yaw1_begin_angle = 150.0f;            ///< yaw1 初始角度（已废弃）
 
@@ -94,11 +102,7 @@ float shootData[2]= {0};
  */
 float reset_xrimu_data_range(float data) // -180~180
 {
-    if (data>180){
-        data=data-360;}
-    else if (data<-180){
-        data=data+360;}
-    return data;
+    return theta_format(data);
 }
 
 /**
@@ -109,7 +113,7 @@ float reset_xrimu_data_range(float data) // -180~180
  *          2. 电机参数配置与初始化：
  *             - yaw1 电机：GM6020，CAN1 ID=1，角度环 + 速度环双闭环，IMU 反馈
  *             - pitch电机：GM6020，CAN1 ID=2，角度环 + 速度环双闭环，IMU 反馈
- *             - yaw2 电机：DM8006，CAN2 ID=8，角度环，编码器反馈
+ *             - yaw2 电机：DM4310，CAN2 ID=8，角度环，编码器反馈
  *          3. 蜂鸣器告警装置注册（分高/低优先级）
  *          4. 消息中心发布者和订阅者注册
  *          5. 初始状态设置为停止
@@ -119,7 +123,7 @@ float reset_xrimu_data_range(float data) // -180~180
  */
 void GimbalInit()
 {
-    // gimba_IMU_data = INS_Init(); // IMU 先初始化，获取姿态数据指针赋给 yaw 电机的其他数据来源，
+    gimba_IMU_data = INS_Init(); // IMU 先初始化，获取姿态数据指针赋给 yaw 电机的其他数据来源，
 
     /* ==================== yaw1 电机初始化（小云台yaw轴） ==================== */
     Motor_Init_Config_s yaw1_config = {
@@ -217,12 +221,11 @@ void GimbalInit()
 
     /* ==================== yaw2 电机初始化（大云台yaw 轴/底盘跟随） ==================== */
     // 注意: yaw2 使用增益调度 + 原有PID集成
-    // 增益调度动态调整Kp/Ki/Kd，原有PID保留所有高级功能
-    Motor_Init_Config_s dm8006_yaw2={
+    Motor_Init_Config_s dm4310_yaw2={
        .can_init_config ={
          .can_handle = &hcan2,
          .tx_id = 8 ,
-         .rx_id = 18
+         .rx_id = 0x18
        },
        .controller_param_init_config = {
            .angle_PID = {
@@ -237,6 +240,7 @@ void GimbalInit()
                 .IntegralLimit = 1,  // 积分限幅
                 .MaxOut = 45,        // 最大输出
             },
+            .other_angle_feedback_ptr = &yaw2_angle_feedback, // yaw2 电机角度反馈指针
         },
         .controller_setting_init_config = {
             .angle_feedback_source = MOTOR_FEED,
@@ -248,7 +252,7 @@ void GimbalInit()
         },
         .motor_type = no_set_zero
     };
-    dmmotor_yaw2 = DMMotorInit(&dm8006_yaw2);
+    dmmotor_yaw2 = DMMotorInit(&dm4310_yaw2);
 
     /* ==================== 蜂鸣器告警装置初始化 ==================== */
     BuzzerInit();
@@ -266,7 +270,8 @@ void GimbalInit()
     /* ==================== 消息中心注册 ==================== */
     gimbal_pub = PubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
     gimbal_sub = SubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
-    chassis_speed_sub = SubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));
+    x_imu_sub = SubRegister("x_imu_feed", sizeof(ImuData)); // 订阅来自 INS_Task 的 IMU 数据
+    //chassis_speed_sub = SubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));
 
     /* ==================== 初始状态设置为停止 ==================== */
     DJIMotorStop(yaw1_motor);
@@ -310,10 +315,6 @@ uint8_t cheek_motor_and_imu_online()
     return flag;
 }
 
-uint8_t remote_pitch_contral_flage = 0;///< pitch 轴遥控映射使能标志位
-
-float err_remote_pitch; ///< 遥控 pitch 指令与电机实际位置的误差（用于死区判断）
-
 /* ==================== 云台核心控制任务 ==================== */
 /**
  * @brief 机器人云台控制核心任务
@@ -332,7 +333,7 @@ float err_remote_pitch; ///< 遥控 pitch 指令与电机实际位置的误差�
  *             b) GIMBAL_GYRO_MODE（陀螺仪反馈模式 - 主要工作模式）：
  *                - 执行在线检测，异常时停机保护
  *                - 计算 yaw/pitch目标角度（含零点补偿）
- *                - 设置 yaw2→yaw1 耦合前馈补偿（-55×角度误差）
+ *                - 设置 yaw2→yaw1 耦合前馈补偿（yaw2 到 yaw1 的速度前馈增益 * 速度误差）
  *                - 视觉模式：使用 IMU 反馈控制 pitch
  *                - 遥控模式：使用编码器反馈，带死区判断防止抖动
  *             
@@ -354,11 +355,14 @@ float err_remote_pitch; ///< 遥控 pitch 指令与电机实际位置的误差�
  */
 void GimbalTask()
 {
+    uint8_t remote_pitch_contral_flage = 0;///< pitch 轴遥控映射使能标志位
+    float err_remote_pitch; ///< 遥控 pitch 指令与电机实际位置的误差（用于死区判断）
 
     /* ==================== 步骤 1: 获取云台控制数据 ==================== */
     // 后续增加未收到数据的处理
     SubGetMessage(gimbal_sub, &gimbal_cmd_recv);
-    SubGetMessage(chassis_speed_sub, &chassis_real_speed);
+    SubGetMessage(x_imu_sub, &imu_data); // 获取最新 IMU 姿态数据
+    //SubGetMessage(chassis_speed_sub, &chassis_real_speed);
 
     // //判断 xrimu 是否离线
     // while(begin_xrimu_yaw==0 || begin_xrimu_pitch==0)
@@ -428,13 +432,22 @@ void GimbalTask()
         yaw1_aim_angle = reset_xrimu_data_range(gimbal_cmd_recv.yaw + begin_xrimu_yaw);
         pitch_aim_angle = reset_xrimu_data_range(gimbal_cmd_recv.pitch + begin_xrimu_pitch);
 
+        /* --- yaw2 电机角度反馈 --- */
+        yaw2_angle_feedback = yaw1_motor->measure.angle_single_round;
+
         /* --- yaw2→yaw1 耦合前馈补偿 --- */
-        yaw1_speed_feedforward = -err_feedback_yaw2_to_yaw1*55;//大 yaw2 给小 yaw1 的前馈
+        yaw1_speed_feedforward = err_feedback_yaw2_to_yaw1 * yaw2_to_yaw1_speed_ff_gain;//大 yaw2 给小 yaw1 的前馈
+
+        /* --- yaw2→yaw1 二阶电流前馈（惯性力矩补偿）--- */
+        //测试前先查看dmmotor_yaw2->measure.torque是否有数值，再调整参数
+        yaw1_current_feedforward = dmmotor_yaw2->measure.torque * yaw2_to_yaw1_current_ff_gain;
+        /* --- 测试变量(用于调试) --- */
+        yaw1_state_error = yaw1_aim_angle - yaw1_motor->measure.angle_single_round; // yaw1 电机状态误差
 
         DJIMotorSetRef(yaw1_motor, yaw1_aim_angle);
 
         /* --- pitch 轴双模式控制 --- */
-        if(flag_vision_mode==1)//哨兵模式
+        if(gimbal_cmd_recv.flag_vision_mode==1)//哨兵模式
         {   
             /* 视觉模式：使用 IMU 反馈实现自稳控制 */
             DJIMotorChangeFeed(pitch_motor, ANGLE_LOOP, OTHER_FEED);
@@ -491,9 +504,8 @@ void GimbalTask()
     // 根据IMU姿态/pitch电机角度反馈计算出当前配重下的重力矩
     // ...
 
-    /* ==================== 步骤 3: 状态反馈发布 ==================== */
-    // 推送消息给视觉模块 
-    gimbal_feedback_data.gimbal_imu_data = *gimba_IMU_data;
+    /* ==================== 步骤 3: 状态反馈发布 ==================== */ 
+    //gimbal_feedback_data.gimbal_imu_data = *gimba_IMU_data;
     gimbal_feedback_data.yaw_motor_single_round_angle = dmmotor_yaw2->measure.position;
     ////////////////////////////车的朝向
 

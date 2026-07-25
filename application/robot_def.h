@@ -227,6 +227,8 @@ typedef struct
     float chassis_rotate_wz;
 
     gimbal_mode_e gimbal_mode;
+
+    uint8_t flag_vision_mode;        // 0非视觉模式，1视觉模式
 } Gimbal_Ctrl_Cmd_s;
 
 // cmd发布的发射控制数据,由shoot订阅
@@ -273,7 +275,7 @@ typedef struct
 /* @todo : 对于平衡底盘,需要不同的反馈数据 */
 typedef struct
 {
-    attitude_t gimbal_imu_data;
+//    attitude_t gimbal_imu_data;
     float yaw_motor_single_round_angle;
 } Gimbal_Upload_Data_s;
 

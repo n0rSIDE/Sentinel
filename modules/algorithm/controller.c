@@ -10,6 +10,7 @@
  */
 #include "controller.h"
 #include "memory.h"
+#include "user_lib.h"
 
 /* ----------------------------下面是pid优化环节的实现---------------------------- */
 
@@ -221,10 +222,7 @@ float DMPIDCalculate(PIDInstance *pid, float measure, float ref)
     pid->Ref = ref;
     pid->Err = pid->Ref - pid->Measure;
 
-    if(pid->Err>180)
-    {pid->Err-=360;}
-    else if(pid->Err<-180)
-    {pid->Err+=360;}
+    pid->Err = theta_format(pid->Err);
     
     // 如果在死区外,则计算PID
     if (abs(pid->Err) > pid->DeadBand)

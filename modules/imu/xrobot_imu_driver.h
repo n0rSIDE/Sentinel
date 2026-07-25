@@ -52,4 +52,15 @@ typedef struct {
 
 void register_imu_can_receiver(FDCAN_HandleTypeDef* fdcan_id);
 
+/**
+ * @brief 初始化 IMU 数据发布者（由 INS_Init 调用，仅执行一次）
+ */
+void IMU_PubInit(void);
+
+/**
+ * @brief 发布最新的 IMU 数据到消息总线（由 INS_Task 以 1kHz 调用）
+ * @note 必须在 RTOS 任务上下文中调用，不能在 ISR 中调用
+ */
+void IMU_PublishData(void);
+
 #endif
