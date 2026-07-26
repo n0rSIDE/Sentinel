@@ -34,6 +34,7 @@ GainScheduleParams_t yaw2_gain_schedule_params = {
 };
     
 /* ==================== 模块内部全局变量 ==================== */
+//yaw轴的回正也可以再调一下
 static attitude_t *gimba_IMU_data;      ///< 云台 IMU 数据指针，指向解算后的姿态信息
 DJIMotorInstance *yaw1_motor;           ///< yaw 轴电机 1 实例（小云台电机）
 DJIMotorInstance *pitch_motor;          ///< pitch 轴电机实例（俯仰电机）
@@ -53,7 +54,7 @@ static ImuData imu_data;                          ///< 来自 xrobot_imu 的 IMU
 /* ==================== 前馈控制相关变量 ==================== */
 // yaw2到yaw1的前馈增益系数应该都为负数，表示yaw2的正向运动会产生对yaw1的负向补偿
 static float yaw2_to_yaw1_speed_ff_gain = -55.0f;    ///< yaw2 到 yaw1 的速度前馈增益
-static float yaw2_to_yaw1_current_ff_gain = 0.0f;   ///< yaw2 到 yaw1 的电流前馈增益
+static float yaw2_to_yaw1_current_ff_gain = -500.0f;   ///< yaw2 到 yaw1 的电流前馈增益
 
 static float yaw_gyro_feedforward = -0.0f;          ///< yaw 轴陀螺仪前馈量（预留）
 
@@ -70,7 +71,7 @@ static float yaw2_angle_feedback = 0.0f;         ///< yaw2 电机角度前馈量
 
 float yaw1_motor_zero_position = 330.0f;            ///< yaw1 电机机械零点位置（单位：度）
 
-static float yaw1_state_error = 0.0f;                 ///< yaw1 电机状态误差（用于调试）
+static float yaw1_motor_measure_single = 0.0f;     ///< 调试用
 
 //static float yaw1_begin_angle = 150.0f;            ///< yaw1 初始角度（已废弃）
 
@@ -442,7 +443,7 @@ void GimbalTask()
         //测试前先查看dmmotor_yaw2->measure.torque是否有数值，再调整参数
         yaw1_current_feedforward = dmmotor_yaw2->measure.torque * yaw2_to_yaw1_current_ff_gain;
         /* --- 测试变量(用于调试) --- */
-        yaw1_state_error = yaw1_aim_angle - yaw1_motor->measure.angle_single_round; // yaw1 电机状态误差
+        yaw1_motor_measure_single = yaw1_motor->measure.angle_single_round;
 
         DJIMotorSetRef(yaw1_motor, yaw1_aim_angle);
 
